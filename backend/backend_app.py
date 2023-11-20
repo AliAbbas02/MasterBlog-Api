@@ -1,5 +1,6 @@
 from flask import Flask, jsonify, redirect, request, url_for, abort
 from flask_cors import CORS
+from fuzzywuzzy import fuzz, process
 
 app = Flask(__name__)
 CORS(app)  # This will enable CORS for all routes
@@ -92,8 +93,23 @@ def update(id):
     else:
         abort(404)
 
-    
 
+@app.route('/api/posts/search')
+def search():
+    #get the params sent for search, if no params use defaults
+    title = request.args.get('title', default='none').lower()
+    content = request.args.get('content', default='none').lower()
+    all_matched = []
+    for post in POSTS:
+        #if ratio of compare is more than 90 then add that post
+        if fuzz.partial_token_sort_ratio(title, post['title'].lower()) >= 90\
+              or fuzz.partial_token_sort_ratio\
+                (content, post['content'].lower()) >= 90:
+            #append the matched posts with ratio 90 or above 
+            all_matched.append(post)
+    
+    return jsonify(all_matched)
+   
 
 
 
