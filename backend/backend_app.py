@@ -13,12 +13,40 @@ POSTS = [
 
 @app.route('/api/posts', methods=['GET'])
 def get_posts():
-    return jsonify(POSTS)
+    #checking if user has posted a query
+    sort = request.args.get('sort')
+    direction = request.args.get('direction')
+    #setting sort and direction parameters
+    sorting_criteria: list = ['title', 'content']
+    direction_criteria: list =['asc', 'desc']
+    direction_order = ''
+    #if direction provided in request
+    if direction in direction_criteria:
+        if direction == 'asc':                    
+            direction_order = False
+        elif direction == 'desc':
+            direction_order = True
+    #if direction not provided        
+    elif direction == None:
+        pass
+    #if direction provided doesnot match criteria
+    else:
+        abort(400)
+    #sorting out posts 
+    if sort in sorting_criteria and direction_order != False:
+        return jsonify(sorted(POSTS, key=lambda x: x[sort], reverse=True))
+    #if no sorting request given and direction not invalid return orignal posts
+    elif sort == None:
+        return jsonify(POSTS)
+    elif sort in sorting_criteria and direction_order == False:
+        return jsonify(sorted(POSTS, key=lambda x: x[sort], reverse=False))
+    else:
+         abort(400)
 
 @app.errorhandler(400)
 def bad_request_error(error):
     
-    return jsonify({'error': 'Missing Info'}), 400
+    return jsonify({'error': 'BAD REQUEST'}), 400
 
 @app.route('/api/posts', methods=['POST'], )
 def add(): 
