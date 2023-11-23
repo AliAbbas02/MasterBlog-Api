@@ -1,6 +1,6 @@
 from flask import Flask, jsonify, redirect, request, url_for, abort
 from flask_cors import CORS
-from fuzzywuzzy import fuzz, process
+from fuzzywuzzy import fuzz
 
 app = Flask(__name__)
 CORS(app)  # This will enable CORS for all routes
@@ -10,16 +10,34 @@ POSTS = [
     {"id": 2, "title": "Second post", "content": "This is the second post."},
 ]
 
+users=[]
 
 @app.route('/api/posts', methods=['GET'])
 def get_posts():
+    #pagination
+    page_request:int = 0
+    page:int = int(request.args.get('page', default=1))
+    limit:int = int(request.args.get('limit', default=5))
+    if request.method == 'post':
+        page_request = int(request.args.get('next'))
+        print(page_request)
+        if page + (page_request) == 0:
+            page = 1
+        else:
+            page = page + page_request
+
+    start_index = (page - 1) * limit
+    end_index = start_index + limit
+
+    paginated_posts = POSTS[start_index:end_index]
+    
     #checking if user has posted a query
-    sort = request.args.get('sort')
-    direction = request.args.get('direction')
+    sort:str = request.args.get('sort')
+    direction:str = request.args.get('direction')
     #setting sort and direction parameters
     sorting_criteria: list = ['title', 'content']
     direction_criteria: list =['asc', 'desc']
-    direction_order = ''
+    direction_order:bool = False
     #if direction provided in request
     if direction in direction_criteria:
         if direction == 'asc':                    
@@ -34,12 +52,12 @@ def get_posts():
         abort(400)
     #sorting out posts 
     if sort in sorting_criteria and direction_order != False:
-        return jsonify(sorted(POSTS, key=lambda x: x[sort], reverse=True))
+        return jsonify(sorted(paginated_posts, key=lambda x: x[sort], reverse=True))
     #if no sorting request given and direction not invalid return orignal posts
     elif sort == None:
-        return jsonify(POSTS)
+        return jsonify(paginated_posts)
     elif sort in sorting_criteria and direction_order == False:
-        return jsonify(sorted(POSTS, key=lambda x: x[sort], reverse=False))
+        return jsonify(sorted(paginated_posts, key=lambda x: x[sort], reverse=False))
     else:
          abort(400)
 
