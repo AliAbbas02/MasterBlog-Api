@@ -1,41 +1,46 @@
-from flask import Flask, jsonify, redirect, request, url_for, abort
+from flask import Flask, jsonify, request, abort
 from flask_cors import CORS
 from fuzzywuzzy import fuzz
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from datetime import datetime
+import json
+
 
 app = Flask(__name__)
 CORS(app)  # This will enable CORS for all routes
 
-POSTS = [
-    {"id": 1, "title": "First post", "content": "This is the first post."},
-    {"id": 2, "title": "Second post", "content": "This is the second post."},
-]
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=['5 per minute', '1 per second']
+)
 
-users=[]
+
+def update_post_file(posts):
+    with open('posts.json', 'w') as file:
+        json.dump(posts, file, indent=4)
+
+#user registration
+#user login
+
+#versoning 
+
 
 @app.route('/api/posts', methods=['GET'])
+@limiter.limit('5 per minute')
 def get_posts():
     #pagination
-    page_request:int = 0
     page:int = int(request.args.get('page', default=1))
     limit:int = int(request.args.get('limit', default=5))
-    if request.method == 'post':
-        page_request = int(request.args.get('next'))
-        print(page_request)
-        if page + (page_request) == 0:
-            page = 1
-        else:
-            page = page + page_request
-
     start_index = (page - 1) * limit
     end_index = start_index + limit
-
     paginated_posts = POSTS[start_index:end_index]
-    
-    #checking if user has posted a query
+    #checking if user has posted a query for sorting out date
     sort:str = request.args.get('sort')
     direction:str = request.args.get('direction')
     #setting sort and direction parameters
-    sorting_criteria: list = ['title', 'content']
+    sorting_criteria: list = ['title', 'content', 'author', 'date']
     direction_criteria: list =['asc', 'desc']
     direction_order:bool = False
     #if direction provided in request
@@ -51,6 +56,14 @@ def get_posts():
     else:
         abort(400)
     #sorting out posts 
+    #if sorting out requested by date
+    if sort == 'date':
+        for post in paginated_posts:
+            #convert date strings into real dates
+            date  = datetime.strptime(post['date'], '%Y-%m-%d')
+            post['date'] = date
+    
+    
     if sort in sorting_criteria and direction_order != False:
         return jsonify(sorted(paginated_posts, key=lambda x: x[sort], reverse=True))
     #if no sorting request given and direction not invalid return orignal posts
@@ -61,34 +74,51 @@ def get_posts():
     else:
          abort(400)
 
+
 @app.errorhandler(400)
 def bad_request_error(error):
     
     return jsonify({'error': 'BAD REQUEST'}), 400
 
+def check_keys_in_dict(keys, dictinoary):
+    
+    return all(key in dictinoary for key in keys)
+
+def make_dictionary(data, last_id):
+   
+    return {
+    "id": last_id + 1,
+    "title": data['title'],
+    "content": data['content'],
+    "author": data['author'],
+    "date": datetime.now().strftime('%Y-%m-%d')
+}
+
+
 @app.route('/api/posts', methods=['POST'], )
 def add(): 
     #get post from url
+    keys_list = ['title', 'content', 'author']
     post:dict = request.get_json()
     #checking if user has entered all the details
-    if 'title' in post and 'content' in post:
+    if check_keys_in_dict(keys_list, post):
        #get all ids from posts in database
        all_ids:list = [post['id'] for post in POSTS ]
         #checking if posts in database is not an empty list
        if len(all_ids) != 0:
            #assing max id with increment to new post
-           POSTS.append({'id': max(all_ids) + 1 ,'title': post['title'],
-                      'content': post['content']})
+           POSTS.append(make_dictionary(post, POSTS[-1]['id'] ))
         #if post list is empty
        else:
-           POSTS.append({'id': 1 ,'title': post['title'],
-                      'content': post['content']})
+           POSTS.append(make_dictionary(post, 0))
        #return 201 response for post succesfully created
+       update_post_file(POSTS)
        return jsonify (POSTS[-1]), 201
     
     else:
     #if any missing info handle error
         abort(400)
+
 
 def fetch_post(id):
     '''a fucntion that fetches the index of post if id matched
@@ -115,6 +145,7 @@ def delete(id):
     #if check has index returned delete the post in database
     if post_index != None:
         del POSTS[post_index]
+        update_post_file(POSTS)
         return jsonify({'message': 'Post with id {} deleted'.format(id)})
     
     #if id not found send response 404
@@ -134,6 +165,8 @@ def update(id):
         #iterate on keys and replace data if any sent
         for key in keys_to_replace:
             POSTS[post_index][key] = data_entered[key]
+        
+        update_post_file(POSTS)
         return jsonify({'message': 'Post with id {} updated'.format(id)})
         
     else:
@@ -143,21 +176,37 @@ def update(id):
 @app.route('/api/posts/search')
 def search():
     #get the params sent for search, if no params use defaults
-    title = request.args.get('title', default='none').lower()
-    content = request.args.get('content', default='none').lower()
     all_matched = []
     for post in POSTS:
-        #if ratio of compare is more than 90 then add that post
-        if fuzz.partial_token_sort_ratio(title, post['title'].lower()) >= 90\
-              or fuzz.partial_token_sort_ratio\
-                (content, post['content'].lower()) >= 90:
-            #append the matched posts with ratio 90 or above 
-            all_matched.append(post)
+            for key, value in request.args.items():
+                if fuzz.partial_token_set_ratio(value.lower(),\
+                                                 post[key].lower())>=90:
+                    all_matched.append(post)
     
     return jsonify(all_matched)
-   
+
+
+class InvalidJsonData(Exception):
+    pass
+
+def load_json_file(file_path):
+    try:
+        with open(file_path, 'r') as file:
+            return json.load(file)
+    except json.JSONDecodeError as e:
+        raise InvalidJsonData(f'Error Decoding JSON File')
+
+try:
+    POSTS = load_json_file('posts.json')
+except InvalidJsonData as e:
+    print(e)
+
+def main():
+        app.run(host="0.0.0.0", port=5002, debug=True)
+    
 
 
 
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=5002, debug=True)
+    main()
+

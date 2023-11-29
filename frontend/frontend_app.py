@@ -33,7 +33,7 @@ app = Flask(__name__)
 
 #     return render_template('register.html')
 
-@app.route('/api/posts', methods=['GET'])
+@app.route('/', methods=['GET'])
 def home():
     return render_template("index.html")
 

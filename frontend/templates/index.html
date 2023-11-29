@@ -30,9 +30,12 @@
       <div id="post-container">
         <!-- Blog posts will be inserted here by JavaScript -->
       </div>
-      <button onclick="next()" name="next" value="-1"><</button>
-      <!-- <button onclick="next()" name="next" value="1">></button> -->
+      <!-- <button onclick="next()" name="next" value="-1"><</button>
+      <button onclick="next()" name="next" value="1">></button> -->
     </div>
+    <form action="http://127.0.0.1:5002/api/posts" method="post">
+      <button type="submit" name="next" value="1">></button>
+    </form>
     <!-- <form action="/api/posts" method="post"> -->
 
     <!-- </form> -->
